@@ -1,0 +1,185 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Jan 25 11:48:15 2025
+
+@author: 殣哀
+"""
+
+import sys
+import os
+import tkinter as tk
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+import numpy as np
+from tkinter import messagebox
+import math as ma
+import logging
+
+# 获取可执行文件所在目录
+if getattr(sys, 'frozen', False):
+    base_path = sys._MEIPASS
+else:
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+# 配置日志记录
+log_file = os.path.join(base_path, "data_analysis.log")
+logging.basicConfig(filename=log_file, level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+class DataAnalysisApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("物理实验数据处理")
+        self.center_window(500, 500)
+
+        self.label = tk.Label(root, text="欢迎使用")
+        self.label.pack()
+
+        self.x_coordinates = []
+        self.y_coordinates = []
+
+        self.enter_x = tk.Entry(root)
+        self.enter_x.pack(pady=10)
+        self.enter_y = tk.Entry(root)
+        self.enter_y.pack(pady=10)
+
+        self.label_delta_x = tk.Label(root, text="输入 x 的仪器误差:")
+        self.label_delta_x.pack()
+        self.enter_delta_x = tk.Entry(root)
+        self.enter_delta_x.pack(pady=5)
+
+        self.label_delta_y = tk.Label(root, text="输入 y 的仪器误差:")
+        self.label_delta_y.pack()
+        self.enter_delta_y = tk.Entry(root)
+        self.enter_delta_y.pack(pady=5)
+
+        self.button = tk.Button(root, text="输入(x，y)坐标", command=self.get_input)
+        self.button.pack()
+
+        self.button_stats = tk.Button(root, text="计算统计信息", command=self.calculate_stats)
+        self.button_stats.pack()
+
+        self.button_view = tk.Button(root, text="查看所有坐标数据", command=self.view_coordinates)
+        self.button_view.pack()
+
+        self.button_regression = tk.Button(root, text="进行线性回归分析并绘图", command=self.linear)
+        self.button_regression.pack()
+
+    def center_window(self, width=300, height=200):
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+        self.root.geometry(f'{width}x{height}+{x}+{y}')
+
+    def get_input(self):
+        try:
+            input_x = self.enter_x.get()
+            input_y = self.enter_y.get()
+            x = float(input_x)
+            y = float(input_y)
+            self.x_coordinates.append(x)
+            self.y_coordinates.append(y)
+
+            messagebox.showinfo("提示", f"已输入x坐标: {x}，已输入y坐标: {y}")
+            self.enter_x.delete(0, tk.END)
+            self.enter_y.delete(0, tk.END)
+
+        except ValueError:
+            messagebox.showerror("错误", "请输入有效数字")
+
+    def view_coordinates(self):
+        if not self.x_coordinates or not self.y_coordinates:
+            messagebox.showinfo("提示", "暂无坐标数据")
+        else:
+            info = ""
+            for i in range(len(self.x_coordinates)):
+                info += f"第 {i + 1} 组: x = {self.x_coordinates[i]}, y = {self.y_coordinates[i]}\n"
+            messagebox.showinfo("所有坐标数据", info)
+
+    def linear(self):
+        if len(self.x_coordinates) < 2 or len(self.y_coordinates) < 2:
+            messagebox.showinfo("提示", "数据点不足，无法进行线性回归分析。")
+            return
+        x = np.array(self.x_coordinates)
+        y = np.array(self.y_coordinates)
+
+        slope, intercept = np.polyfit(x, y, 1)
+        regression_line = slope * x + intercept
+
+        equation = f"y = {slope:.2f}x + {intercept:.2f}"
+        logging.info(f"回归直线方程: {equation}")
+        logging.info(f"斜率: {slope:.2f}")
+        logging.info(f"截距: {intercept:.2f}")
+
+        plt.scatter(x, y, label='Data Points')
+        plt.plot(x, regression_line, color='red', label='Regression Line')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('Linear Regression Analysis')
+        plt.legend()
+        plt.show()
+
+    def average(self, z):
+        if not z:
+            return 0
+        return sum(z) / len(z)
+
+    def aunkown(self, a):
+        if len(a) < 2:
+            logging.info("数据点不足，无法计算 A 类不确定度。")
+            return None
+        x_bar = self.average(a)
+        numerator = sum((i - x_bar) ** 2 for i in a)
+        ua = ma.sqrt(numerator / (len(a) * (len(a) - 1)))
+        logging.info(f"A 类不确定度为: {ua:.4f}")
+        return ua
+
+    def bunkown(self, delta):
+        sqrt3 = ma.sqrt(3)
+        ub = delta / sqrt3
+        logging.info(f"B 类不确定度为: {ub:.4f}")
+        return ub
+
+    def calculate_stats(self):
+        if not self.x_coordinates or not self.y_coordinates:
+            messagebox.showinfo("提示", "暂无坐标数据，无法计算统计信息。")
+            return
+        try:
+            delta_x = float(self.enter_delta_x.get())
+            delta_y = float(self.enter_delta_y.get())
+            if delta_x < 0 or delta_y < 0:
+                messagebox.showerror("错误", "仪器误差值不能为负数，请输入有效的正数。")
+                return
+        except ValueError:
+            messagebox.showerror("错误", "请输入有效的仪器误差值（正数）。")
+            return
+
+        x_avg = self.average(self.x_coordinates)
+        y_avg = self.average(self.y_coordinates)
+
+        x_ua = self.aunkown(self.x_coordinates)
+        x_ub = self.bunkown(delta_x)
+        y_ua = self.aunkown(self.y_coordinates)
+        y_ub = self.bunkown(delta_y)
+
+        result_info = f"x的平均数为： {x_avg:.4f}\n"
+        result_info += f"y的平均数为： {y_avg:.4f}\n"
+        if x_ua is not None:
+            result_info += f"x的A类不确定度为： {x_ua:.4f}\n"
+        if x_ub is not None:
+            result_info += f"x的B类不确定度为： {x_ub:.4f}\n"
+        if y_ua is not None:
+            result_info += f"y的A类不确定度为： {y_ua:.4f}\n"
+        if y_ub is not None:
+            result_info += f"y的B类不确定度为： {y_ub:.4f}\n"
+
+        messagebox.showinfo("统计信息", result_info)
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = DataAnalysisApp(root)
+    root.mainloop()
